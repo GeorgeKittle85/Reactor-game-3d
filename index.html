@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cold Shutdown</title>
+<meta name="description" content="A first-person nuclear plant game: five shifts as lead engineer at Cedar Hollow Unit 2, ending in a meltdown you have to stop.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=Chakra+Petch:wght@600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <div id="view" aria-label="3D view of the plant"></div>
+
+  <!-- Heads-up display -->
+  <div id="hud" hidden>
+    <div id="hud-tl">
+      <div class="hud-day"><span id="hud-dayname">DAY 1 · MON</span><span id="hud-clock">06:00</span></div>
+      <div id="hud-ff" hidden>FAST-FORWARD ×4</div>
+      <ol id="objectives"></ol>
+    </div>
+    <div id="hud-tr">
+      <div class="st-row"><span class="st-k">REACTOR</span><span class="st-v" id="st-power">—</span></div>
+      <div class="st-row"><span class="st-k">OUTPUT</span><span class="st-v" id="st-output">—</span></div>
+      <div class="st-bar"><i id="st-outbar"></i><b id="st-demandmark"></b></div>
+      <div class="st-row"><span class="st-k">TAVG</span><span class="st-v" id="st-tavg">—</span></div>
+      <div class="st-row"><span class="st-k">FUEL CLAD</span><span class="st-v" id="st-clad">—</span></div>
+      <div class="st-row"><span class="st-k">PRESSURE</span><span class="st-v" id="st-press">—</span></div>
+      <div class="st-row" id="st-inv-row"><span class="st-k">RCS INVENTORY</span><span class="st-v" id="st-inv">—</span></div>
+      <div id="st-alarm" hidden></div>
+    </div>
+    <div id="crisis" hidden>
+      <div class="cr-top"><span class="cr-k">STATION BLACKOUT</span><span class="cr-t" id="cr-timer">T+00:00</span></div>
+      <div class="cr-k2">CORE DAMAGE MARGIN</div>
+      <div class="cr-bar"><i id="cr-margin"></i></div>
+      <div class="cr-note" id="cr-note">Clad 330 °C · melt at 1,200 °C</div>
+    </div>
+    <div id="comms" aria-live="polite"></div>
+    <div id="location"></div>
+    <div id="crosshair"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="2.2" class="ch-dot"/><circle cx="20" cy="20" r="14" class="ch-ring" id="ch-ring"/></svg></div>
+    <div id="prompt" hidden><kbd id="prompt-key">E</kbd><span id="prompt-text"></span></div>
+    <div id="waypoints"></div>
+    <div id="toast" hidden></div>
+    <div id="vignette"></div>
+    <div id="keyhints">WASD move · Shift run · E use · M map · T fast-forward · Esc pause</div>
+  </div>
+
+  <!-- Dialogue -->
+  <div id="dialogue" hidden>
+    <div class="dl-card">
+      <div class="dl-who"><span class="dl-badge" id="dl-badge">GK</span><div><div class="dl-name" id="dl-name">Gus Kettleman</div><div class="dl-role" id="dl-role">Shift Supervisor</div></div></div>
+      <p class="dl-text" id="dl-text"></p>
+      <div class="dl-choices" id="dl-choices"></div>
+      <div class="dl-next" id="dl-next">Click or press E / Space to continue</div>
+    </div>
+  </div>
+
+  <!-- Main control board -->
+  <div id="console" hidden>
+    <div class="con-slab" role="dialog" aria-label="Main control board">
+      <header class="con-head">
+        <div>
+          <div class="con-title">UNIT 2 · MAIN CONTROL BOARD</div>
+          <div class="con-sub" id="con-sub">06:00 · Demand 900 MWe</div>
+        </div>
+        <button class="btn ghost" id="con-close" type="button">Close <kbd>Esc</kbd></button>
+      </header>
+      <div class="con-readouts">
+        <div class="ro"><span>Reactor power</span><b id="ro-power">—</b><em>% rated thermal</em></div>
+        <div class="ro"><span>Generator</span><b id="ro-mwe">—</b><em id="ro-demand">demand —</em></div>
+        <div class="ro"><span>Tavg</span><b id="ro-tavg">—</b><em>°C · band 295–305</em></div>
+        <div class="ro"><span>Fuel clad</span><b id="ro-clad">—</b><em>°C · limit 345</em></div>
+        <div class="ro"><span>RCS pressure</span><b id="ro-press">—</b><em>MPa · PORV lifts 16.45</em></div>
+        <div class="ro"><span>Inventory · flow</span><b id="ro-inv">—</b><em id="ro-flow">flow —</em></div>
+      </div>
+      <div class="con-body">
+        <section class="ctl">
+          <h3>Control rods · Bank D <small>W / S</small></h3>
+          <div class="rodbar"><i id="rod-actual"></i><b id="rod-target"></b></div>
+          <input type="range" id="rod-slider" min="0" max="100" step="0.5" aria-label="Rod target position">
+          <div class="btnrow">
+            <button class="btn" data-rod="-5" type="button">Insert 5</button>
+            <button class="btn" data-rod="-1" type="button">−1</button>
+            <button class="btn" data-rod="1" type="button">+1</button>
+            <button class="btn" data-rod="5" type="button">Withdraw 5</button>
+          </div>
+          <p class="ctl-note" id="rod-note">Rods set temperature. Withdraw to heat up, insert to cool down.</p>
+        </section>
+        <section class="ctl">
+          <h3>Turbine load <small>A / D</small></h3>
+          <div class="bigval" id="turb-val">—</div>
+          <input type="range" id="turb-slider" min="0" max="105" step="1" aria-label="Turbine load target">
+          <div class="btnrow">
+            <button class="btn" data-turb="-10" type="button">−10</button>
+            <button class="btn" data-turb="-2" type="button">−2</button>
+            <button class="btn" data-turb="2" type="button">+2</button>
+            <button class="btn" data-turb="10" type="button">+10</button>
+          </div>
+          <p class="ctl-note" id="turb-note">The turbine decides how much power you sell.</p>
+        </section>
+        <section class="ctl">
+          <h3>Reactor coolant pumps</h3>
+          <label class="pumprow" for="pumpA-slider"><span>RCP-A</span><input type="range" id="pumpA-slider" min="0" max="100" step="5"><b id="pumpA-val">100%</b></label>
+          <label class="pumprow" for="pumpB-slider"><span>RCP-B</span><input type="range" id="pumpB-slider" min="0" max="100" step="5"><b id="pumpB-val">100%</b></label>
+          <p class="ctl-note" id="pump-note">Vibration B: —</p>
+          <div class="emerg" id="emerg" hidden>
+            <h3>Emergency bus 1E</h3>
+            <div class="btnrow">
+              <button class="btn warn" id="btn-auxfeed" type="button">Start aux feedwater</button>
+              <button class="btn warn" id="btn-rcpa" type="button">Restart RCP-A</button>
+            </div>
+          </div>
+        </section>
+        <section class="ctl safety">
+          <h3>Reactor protection</h3>
+          <div class="scram-wrap">
+            <button class="scram" id="btn-scram" type="button"><span class="cover" id="scram-cover">LIFT COVER</span><span class="lbl">SCRAM</span></button>
+            <button class="btn" id="btn-reset" type="button">Reset trip</button>
+          </div>
+          <div class="porv"><span>PORV position</span><b id="porv-ind">CLOSED</b></div>
+          <div class="porv"><span>PORV tailpipe temp</span><b id="porv-tail">45 °C</b></div>
+          <button class="btn ghost" id="btn-cr" type="button" hidden>File condition report</button>
+        </section>
+      </div>
+      <div class="con-foot">
+        <div class="annun" id="con-annun"></div>
+        <div class="hint" id="con-hint"><span class="hint-who">Priya</span><span id="con-hint-text">Keep Tavg in the band and output near demand.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Plant map -->
+  <div id="map" hidden><div class="map-slab"><div class="map-head">PLANT LAYOUT · UNIT 2 <span>M to close</span></div><canvas id="map-canvas" width="900" height="560"></canvas></div></div>
+
+  <!-- Touch controls -->
+  <div id="touch" hidden>
+    <div id="stick"><i></i></div>
+    <button class="tbtn" id="t-use" type="button">USE</button>
+    <button class="tbtn small" id="t-map" type="button">MAP</button>
+    <button class="tbtn small" id="t-menu" type="button">II</button>
+    <button class="tbtn small" id="t-ff" type="button">▶▶</button>
+  </div>
+
+  <div id="resume" hidden><div>Click to look around</div><small>Esc pauses the game</small></div>
+
+  <!-- Title -->
+  <section class="screen" id="title">
+    <div class="title-wrap">
+      <div class="tiles" aria-hidden="true"><span class="tile t1">COLD</span><span class="tile t2">SHUTDOWN</span></div>
+      <h1 class="sr-only">Cold Shutdown</h1>
+      <p class="tagline">Five shifts as lead engineer at Cedar Hollow Unit 2. Keep the lights on. Keep the core covered.</p>
+      <div class="menu" id="title-menu">
+        <button class="btn primary" id="btn-new" type="button">New game</button>
+        <button class="btn" id="btn-continue" type="button" hidden>Continue</button>
+        <div class="dayselect" id="dayselect"></div>
+        <button class="btn ghost" id="btn-howto" type="button">How to run a reactor</button>
+      </div>
+      <div class="howto" id="howto" hidden>
+        <h2>Shift briefing</h2>
+        <ul>
+          <li><b>Turbine load</b> decides how many megawatts you sell. Match the grid's demand.</li>
+          <li><b>Control rods</b> set the core temperature. Keep <b>Tavg</b> between 295 and 305 °C: withdraw rods if it's low, insert them if it's high.</li>
+          <li>Keep <b>fuel clad</b> under 345 °C. Push too hard and the reactor trips itself.</li>
+          <li>Walk the plant to finish tasks. Your objectives and a marker show where to go. <b>M</b> opens the map.</li>
+          <li>Hold <b>T</b> to fast-forward quiet stretches of the shift.</li>
+        </ul>
+        <p class="controls"><kbd>WASD</kbd> move · <kbd>Mouse</kbd> look · <kbd>Shift</kbd> run · <kbd>E</kbd> use / talk · <kbd>M</kbd> map · <kbd>Esc</kbd> pause. On a phone: left thumb moves, drag to look, tap USE.</p>
+        <button class="btn" id="btn-howto-close" type="button">Got it</button>
+      </div>
+      <p class="fineprint">A game. The physics is simplified and the people are made up. Sound on recommended.</p>
+    </div>
+  </section>
+
+  <!-- Day intro -->
+  <section class="screen" id="dayintro" hidden>
+    <div class="sheet">
+      <div class="sheet-meta" id="di-meta">SHIFT TURNOVER · UNIT 2</div>
+      <div class="sheet-day" id="di-day">DAY 1 · MONDAY</div>
+      <h2 class="sheet-title" id="di-title">Orientation</h2>
+      <p class="sheet-text" id="di-text"></p>
+      <ul class="sheet-list" id="di-list"></ul>
+      <button class="btn primary" id="di-go" type="button">Start shift</button>
+    </div>
+  </section>
+
+  <!-- Pause -->
+  <section class="screen" id="pause" hidden>
+    <div class="sheet narrow">
+      <div class="sheet-day">PAUSED</div>
+      <div class="menu">
+        <button class="btn primary" id="p-resume" type="button">Resume</button>
+        <button class="btn" id="p-restart" type="button">Restart this day</button>
+        <button class="btn" id="p-quit" type="button">Quit to title</button>
+      </div>
+      <div class="settings">
+        <label for="set-vol">Volume <input type="range" id="set-vol" min="0" max="100" value="80"></label>
+        <label for="set-sens">Look sensitivity <input type="range" id="set-sens" min="20" max="250" value="100"></label>
+        <label class="chk" for="set-invert"><input type="checkbox" id="set-invert"> Invert look up/down</label>
+      </div>
+      <p class="controls"><kbd>WASD</kbd> move · <kbd>Shift</kbd> run · <kbd>E</kbd> use · <kbd>M</kbd> map · <kbd>T</kbd> fast-forward</p>
+    </div>
+  </section>
+
+  <!-- End of day report -->
+  <section class="screen" id="report" hidden>
+    <div class="sheet">
+      <div class="sheet-meta" id="rp-meta">END OF SHIFT REPORT</div>
+      <div class="report-grid">
+        <table class="rp-table"><tbody id="rp-rows"></tbody></table>
+        <div class="stamp" id="rp-grade">A</div>
+      </div>
+      <blockquote class="rp-note" id="rp-note"></blockquote>
+      <button class="btn primary" id="rp-go" type="button">Next shift</button>
+    </div>
+  </section>
+
+  <!-- Ending -->
+  <section class="screen" id="ending" hidden>
+    <div class="sheet wide">
+      <div class="sheet-meta" id="en-meta"></div>
+      <h2 class="ending-title" id="en-title"></h2>
+      <div class="ending-body" id="en-body"></div>
+      <div class="menu row" id="en-menu"></div>
+    </div>
+  </section>
+
+  <div id="flash"></div>
+  <div id="loading"><div class="ld-tile">LOADING UNIT 2</div><p id="ld-msg">Spinning up the turbine…</p></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<script src="js/util.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/screens.js"></script>
+<script src="js/world.js"></script>
+<script src="js/player.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/story.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
