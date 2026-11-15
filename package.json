@@ -1,0 +1,13 @@
+{
+  "name": "cold-shutdown",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A first-person 3D nuclear plant game: five shifts as lead engineer, ending in a meltdown you have to stop.",
+  "license": "MIT",
+  "scripts": {
+    "start": "node tools/serve.mjs 8080",
+    "build": "node tools/build.mjs",
+    "test": "node --test tests/sim.test.mjs",
+    "test:e2e": "node tests/playthrough.mjs"
+  }
+}
